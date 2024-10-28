@@ -1,21 +1,42 @@
 #!/bin/bash
 
-# Add the Xtra Void repository for Hyprland (if not already added)
-if ! grep -q "https://repo.skami.dev" /etc/xbps.d/*; then
-  echo "Adding Xtra Void repository for Hyprland..."
-  sudo xbps-install -Syu
-  echo "repository=https://repo.skami.dev/xtra/current" | sudo tee /etc/xbps.d/00-repo-xtra.conf
-  sudo xbps-install -S
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Add the repository for Hyprland (if not already added)
+if ! grep -q "https://raw.githubusercontent.com/Makrennel/hyprland-void/repository-x86_64-glibc" /etc/xbps.d/*; then
+  echo "Adding the repository for Hyprland..."
+  echo "repository=https://raw.githubusercontent.com/Makrennel/hyprland-void/repository-x86_64-glibc" | sudo tee /etc/xbps.d/00-hyprland-repo.conf
 fi
 
-# Install LXQt, Hyprland, SDDM, Kitty, PipeWire, and xdg-desktop-portal with dependencies
-echo "Installing LXQt, Hyprland, SDDM, Kitty, PipeWire, xdg-desktop-portal..."
-sudo xbps-install -Sy lxqt hyprland lxqt-qtplugin sddm kitty pipewire pipewire-alsa pipewire-pulse \
+# Update package list
+echo "Updating package list..."
+sudo xbps-install -S
+
+# Install necessary packages, with the -S flag to ensure dependencies are met
+echo "Installing Wayland, LXQt, Hyprland, SDDM, Kitty, PipeWire, and xdg-desktop-portal..."
+sudo xbps-install -Sy wayland wayland-protocols lxqt hyprland lxqt-qtplugin sddm kitty pipewire pipewire-alsa pipewire-pulse \
 xdg-desktop-portal xdg-desktop-portal-wlr
+
+# Check for successful installation of essential packages
+REQUIRED_PACKAGES=("wayland" "lxqt" "hyprland" "sddm" "kitty" "pipewire" "xdg-desktop-portal" "xdg-desktop-portal-wlr")
+
+for package in "${REQUIRED_PACKAGES[@]}"; do
+    if ! command_exists "$package" && ! xbps-query -Rs "$package" >/dev/null; then
+        echo "Error: $package installation failed. Please ensure it is available in the repositories."
+        exit 1
+    fi
+done
 
 # Enable SDDM as the default display manager
 echo "Enabling SDDM as the default display manager..."
-sudo ln -s /etc/sv/sddm /var/service/
+if [ ! -L /var/service/sddm ]; then
+    sudo ln -s /etc/sv/sddm /var/service/
+else
+    echo "SDDM is already enabled."
+fi
 
 # Create .xinitrc file to start Hyprland with LXQt in Wayland
 echo "Creating .xinitrc file..."
@@ -32,45 +53,50 @@ EOL
 # Make .xinitrc executable
 chmod +x ~/.xinitrc
 
-# Set up LXQt configuration for Wayland
-echo "Configuring LXQt for Wayland..."
+# Set up LXQt configuration for Wayland and place the panel at the top
+echo "Configuring LXQt for Wayland and placing the panel at the top..."
 mkdir -p ~/.config/lxqt
 cat <<EOL > ~/.config/lxqt/lxqt.conf
 [General]
-# Use Wayland and specify Hyprland as the window manager
 window_manager=Hyprland
+
+[Panel]
+position=Top
 EOL
 
-# Configure Hyprland shortcuts, window management, focus follows mouse
-echo "Configuring Hyprland shortcuts and focus follows mouse..."
+# Configure Hyprland with dynamic tiling, focus follows mouse, and no window controls
+echo "Configuring Hyprland with default settings and dynamic tiling..."
 mkdir -p ~/.config/hypr
 cat <<EOL > ~/.config/hypr/hyprland.conf
 # Hyprland configuration for keybindings and window behavior
-bind=SUPER+Q, kill
+bind=SUPER+Q, closewindow
 bind=SUPER+SHIFT+Q, kill
 bind=SUPER+ENTER, exec kitty
 bind=SUPER+D, exec lxqt-runner  # Use the LXQt menu
 
-# Window management settings
-layout=tiling
-# Enable borders
-border_width=2
-border_color=0xFFFFFF  # Change this to your preferred border color
-
 # Focus settings
 focus_follows_mouse=true
+
+# Default dynamic tiling layout (leave as default)
+layout=master
+
+# Ensure Hyprland is the only window manager in use, no window controls
+decoration {
+    disable_window_controls = true  # Disables minimize, maximize, and close buttons
+}
 EOL
 
-# Remove window closing buttons from LXQt
-echo "Removing window closing buttons from LXQt..."
+# Remove window controls from LXQt (maximize, minimize, close buttons)
+echo "Removing window controls from LXQt..."
 mkdir -p ~/.config/lxqt
-cat <<EOL > ~/.config/lxqt/lxqt.conf
+cat <<EOL > ~/.config/lxqt/window.conf
 [Window]
-# Hide the close button
+maximize_button=false
+minimize_button=false
 close_button=false
 EOL
 
-# Check if a session is already set up
+# Check if a Wayland session is already set up
 echo "Checking for existing session setup..."
 if [ ! -f ~/.config/wayland-session ]; then
     echo "Setting up a Wayland session..."
@@ -81,8 +107,45 @@ else
     echo "Session already set up."
 fi
 
-# Inform the user about the next steps
-echo "Setup is complete!"
-echo "SDDM is now set as the default display manager."
-echo "You can now reboot your system, and SDDM will be available for session selection."
-echo "PipeWire and xdg-desktop-portal have been installed and are ready to use."
+# Ensure PipeWire is installed and enabled
+echo "Setting up PipeWire..."
+if ! command_exists "pipewire"; then
+    echo "Error: PipeWire installation failed!"
+    exit 1
+else
+    echo "PipeWire is installed."
+    # Enable PipeWire services
+    sudo ln -s /etc/sv/pipewire /var/service/
+    sudo ln -s /etc/sv/pipewire-pulse /var/service/
+fi
+
+# Verify the installation of required packages
+echo "Verifying installation..."
+for package in "${REQUIRED_PACKAGES[@]}"; do
+    if ! xbps-query -Rs "$package" >/dev/null; then
+        echo "Error: $package is not installed correctly."
+        exit 1
+    else
+        echo "$package is installed."
+    fi
+done
+
+# Verify configuration files
+echo "Verifying configuration files..."
+CONFIG_FILES=(
+    "~/.xinitrc"
+    "~/.config/hypr/hyprland.conf"
+    "~/.config/lxqt/lxqt.conf"
+    "~/.config/lxqt/window.conf"
+)
+
+for file in "${CONFIG_FILES[@]}"; do
+    if [ ! -f "$file" ]; then
+        echo "Error: Configuration file $file is missing!"
+        exit 1
+    else
+        echo "$file exists."
+    fi
+done
+
+echo "Setup complete. Please reboot to apply all changes."
