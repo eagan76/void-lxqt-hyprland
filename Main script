@@ -15,18 +15,28 @@ fi
 echo "Updating package list..."
 sudo xbps-install -S
 
-# Install necessary packages, with the -S flag to ensure dependencies are met
-echo "Installing Wayland, LXQt, Hyprland, SDDM, Kitty, PipeWire, PulseAudio, and xdg-desktop-portal..."
+# Install necessary packages with the -S flag to ensure dependencies are met
+echo "Installing Wayland, LXQt, Hyprland, SDDM, Kitty, PipeWire, PulseAudio, xdg-desktop-portal, and curl..."
 sudo xbps-install -Sy wayland wayland-protocols lxqt hyprland lxqt-qtplugin sddm kitty pipewire pipewire-alsa pipewire-pulse \
-xdg-desktop-portal xdg-desktop-portal-wlr pulseaudio pulseaudio-utils pavucontrol
+xdg-desktop-portal xdg-desktop-portal-wlr pulseaudio pulseaudio-utils pavucontrol curl imagemagick
 
 # Check for successful installation of essential packages
-REQUIRED_PACKAGES=("wayland" "lxqt" "hyprland" "sddm" "kitty" "pipewire" "pulseaudio" "xdg-desktop-portal" "xdg-desktop-portal-wlr")
+REQUIRED_PACKAGES=("wayland" "lxqt" "hyprland" "sddm" "kitty" "pipewire" "pulseaudio" "xdg-desktop-portal" "xdg-desktop-portal-wlr" "curl")
 
 for package in "${REQUIRED_PACKAGES[@]}"; do
     if ! command_exists "$package" && ! xbps-query -Rs "$package" >/dev/null; then
         echo "Error: $package installation failed. Please ensure it is available in the repositories."
         exit 1
+    fi
+done
+
+# Remove other display managers if installed
+echo "Removing other display managers if they exist..."
+UNWANTED_DISPLAY_MANAGERS=("lightdm" "gdm" "lxdm" "wdm")
+for dm in "${UNWANTED_DISPLAY_MANAGERS[@]}"; do
+    if xbps-query -Rs "$dm" >/dev/null; then
+        echo "Uninstalling $dm..."
+        sudo xbps-remove -Ry "$dm"
     fi
 done
 
@@ -38,121 +48,152 @@ else
     echo "SDDM is already enabled."
 fi
 
-# Create .xinitrc file to start Hyprland with LXQt in Wayland
-echo "Creating .xinitrc file..."
-cat <<EOL > ~/.xinitrc
-#!/bin/sh
-# Set environment variable for Wayland
-export XDG_SESSION_TYPE=wayland
-# Start Hyprland as the window manager
-exec Hyprland &
-# Start LXQt
-exec startlxqt
-EOL
-
-# Make .xinitrc executable
-chmod +x ~/.xinitrc
-
-# Set up LXQt configuration for Wayland and place the panel at the top
-echo "Configuring LXQt for Wayland and placing the panel at the top..."
-mkdir -p ~/.config/lxqt
-cat <<EOL > ~/.config/lxqt/lxqt.conf
-[General]
-window_manager=Hyprland
-
-[Panel]
-position=Top
-EOL
-
-# Configure Hyprland with dynamic tiling, focus follows mouse, and no window controls
-echo "Configuring Hyprland with default settings and dynamic tiling..."
-mkdir -p ~/.config/hypr
-cat <<EOL > ~/.config/hypr/hyprland.conf
-# Hyprland configuration for keybindings and window behavior
-bind=SUPER+Q, closewindow
-bind=SUPER+SHIFT+Q, kill
-bind=SUPER+ENTER, exec kitty
-bind=SUPER+D, exec lxqt-runner  # Use the LXQt menu
-
-# Focus settings
-focus_follows_mouse=true
-
-# Default dynamic tiling layout (leave as default)
-layout=master
-
-# Ensure Hyprland is the only window manager in use, no window controls
-decoration {
-    disable_window_controls = true  # Disables minimize, maximize, and close buttons
-}
-EOL
-
-# Remove window controls from LXQt (maximize, minimize, close buttons)
-echo "Removing window controls from LXQt..."
-mkdir -p ~/.config/lxqt
-cat <<EOL > ~/.config/lxqt/window.conf
-[Window]
-maximize_button=false
-minimize_button=false
-close_button=false
-EOL
-
-# Check if a Wayland session is already set up
-echo "Checking for existing session setup..."
-if [ ! -f ~/.config/wayland-session ]; then
-    echo "Setting up a Wayland session..."
-    mkdir -p ~/.config
-    echo "export XDG_SESSION_TYPE=wayland" > ~/.config/wayland-session
-    echo "Session setup complete."
-else
-    echo "Session already set up."
-fi
-
-# Ensure PipeWire and PulseAudio are installed and enabled
-echo "Setting up PipeWire and PulseAudio..."
-if ! command_exists "pipewire"; then
-    echo "Error: PipeWire installation failed!"
-    exit 1
-else
-    echo "PipeWire is installed."
-    # Enable PipeWire services
+# Enable PipeWire services
+echo "Enabling PipeWire services..."
+if [ ! -L /var/service/pipewire ]; then
     sudo ln -s /etc/sv/pipewire /var/service/
+fi
+if [ ! -L /var/service/pipewire-pulse ]; then
     sudo ln -s /etc/sv/pipewire-pulse /var/service/
 fi
 
-if ! command_exists "pulseaudio"; then
-    echo "Error: PulseAudio installation failed!"
-    exit 1
-else
-    echo "PulseAudio is installed."
+# Enable xdg-desktop-portal
+echo "Enabling xdg-desktop-portal service..."
+if [ ! -L /var/service/xdg-desktop-portal ]; then
+    sudo ln -s /etc/sv/xdg-desktop-portal /var/service/
+fi
+if [ ! -L /var/service/xdg-desktop-portal-wlr ]; then
+    sudo ln -s /etc/sv/xdg-desktop-portal-wlr /var/service/
 fi
 
-# Verify the installation of required packages
-echo "Verifying installation..."
-for package in "${REQUIRED_PACKAGES[@]}"; do
-    if ! xbps-query -Rs "$package" >/dev/null; then
-        echo "Error: $package is not installed correctly."
-        exit 1
-    else
-        echo "$package is installed."
-    fi
-done
+# Set up SDDM custom theme directory
+SDDM_THEME_DIR="/usr/share/sddm/themes/stickman-theme"
+sudo mkdir -p "$SDDM_THEME_DIR"
 
-# Verify configuration files
-echo "Verifying configuration files..."
-CONFIG_FILES=(
-    "~/.xinitrc"
-    "~/.config/hypr/hyprland.conf"
-    "~/.config/lxqt/lxqt.conf"
-    "~/.config/lxqt/window.conf"
-)
+# Download necessary fonts (Dancing Script)
+echo "Downloading Dancing Script font..."
+FONT_DIR="/usr/share/fonts/truetype/dancing-script"
+sudo mkdir -p "$FONT_DIR"
+cd /tmp
+wget https://github.com/google/fonts/raw/main/ofl/dancingscript/DancingScript%5Bwght%5D.ttf
+sudo mv DancingScript[wght].ttf "$FONT_DIR"
 
-for file in "${CONFIG_FILES[@]}"; do
-    if [ ! -f "$file" ]; then
-        echo "Error: Configuration file $file is missing!"
-        exit 1
-    else
-        echo "$file exists."
-    fi
-done
+# SDDM Theme Files
+echo "Setting up the SDDM theme..."
+cat <<EOL | sudo tee "$SDDM_THEME_DIR/theme.conf"
+[General]
+background=/usr/share/sddm/themes/stickman-theme/background.jpg
+type=QML
 
-echo "Setup complete. Please reboot to apply all changes."
+[Greeter]
+position=center
+EOL
+
+# Create the QML file for SDDM layout
+echo "Creating QML layout file..."
+cat <<EOL | sudo tee "$SDDM_THEME_DIR/Main.qml"
+import QtQuick 2.0
+import QtQuick.Controls 2.0
+import org.kde.plasma.core 2.0 as PlasmaCore
+
+Item {
+    id: root
+
+    Rectangle {
+        id: backgroundRect
+        anchors.fill: parent
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "yellow" }
+            GradientStop { position: 1.0; color: "purple" }
+        }
+    }
+
+    // Login form on the left
+    Column {
+        anchors.centerIn: parent
+        spacing: 20
+
+        PlasmaCore.Label {
+            text: "Username:"
+            font.pixelSize: 24
+            color: "white"
+        }
+
+        TextField {
+            id: usernameField
+            width: 300
+            font.pixelSize: 24
+        }
+
+        PlasmaCore.Label {
+            text: "Password:"
+            font.pixelSize: 24
+            color: "white"
+        }
+
+        TextField {
+            id: passwordField
+            width: 300
+            echoMode: TextInput.Password
+            font.pixelSize: 24
+        }
+
+        Button {
+            text: "Login"
+            onClicked: {
+                // Trigger the login function
+                login()
+            }
+        }
+    }
+
+    // "Stickman-OS" text centered
+    Text {
+        id: stickmanText
+        text: "Stickman-OS"
+        anchors.centerIn: parent
+        font.pixelSize: 72
+        font.family: "Dancing Script"
+        color: "mediumgrey"
+    }
+}
+EOL
+
+# Set the background image
+echo "Generating background image..."
+cat <<EOL | sudo tee "$SDDM_THEME_DIR/background.jpg"
+/* Set your background gradient image or custom background here */
+EOL
+
+# Update SDDM to use the new theme
+echo "Configuring SDDM to use the new theme..."
+sudo sed -i 's/^Current=.*/Current=stickman-theme/' /etc/sddm.conf
+
+# Create the desktop background image with "Stickman-OS" text
+echo "Generating desktop background with gradient and centered text..."
+BACKGROUND_IMG="/usr/share/lxqt/themes/stickman-background/default-background.png"
+convert -size 1920x1080 gradient:yellow-purple -font Dancing-Script -pointsize 120 \
+    -gravity center -fill mediumgrey -annotate +0+0 'Stickman-OS' "$BACKGROUND_IMG"
+
+# Set LXQt default desktop background
+LXQT_BACKGROUND_DIR="/usr/share/lxqt/themes/stickman-background"
+sudo mkdir -p "$LXQT_BACKGROUND_DIR"
+
+echo "Setting up default LXQt background..."
+cat <<EOL | sudo tee "$LXQT_BACKGROUND_DIR/default-background.png"
+/* Gradient background image with Stickman-OS text centered */
+EOL
+
+# Set LXQt to use the custom background
+echo "Configuring LXQt to use the new background..."
+mkdir -p ~/.config/pcmanfm-qt/lxqt/settings.conf
+cat <<EOL | tee ~/.config/pcmanfm-qt/lxqt/settings.conf
+[Desktop]
+wallpaper=/usr/share/lxqt/themes/stickman-background/default-background.png
+EOL
+
+# Restart SDDM to apply changes
+echo "Restarting SDDM to apply changes..."
+sudo sv restart sddm
+
+echo "SDDM and LXQt theme setup complete."
