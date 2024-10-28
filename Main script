@@ -21,7 +21,7 @@ sudo xbps-install -Sy wayland wayland-protocols lxqt hyprland lxqt-qtplugin sddm
 xdg-desktop-portal xdg-desktop-portal-wlr pulseaudio pulseaudio-utils pavucontrol curl imagemagick
 
 # Check for successful installation of essential packages
-REQUIRED_PACKAGES=("wayland" "lxqt" "hyprland" "sddm" "kitty" "pipewire" "pulseaudio" "xdg-desktop-portal" "xdg-desktop-portal-wlr" "curl")
+REQUIRED_PACKAGES=("wayland" "lxqt" "hyprland" "sddm" "kitty" "pipewire" "pulseaudio" "xdg-desktop-portal" "xdg-desktop-portal-wlr" "curl" "imagemagick")
 
 for package in "${REQUIRED_PACKAGES[@]}"; do
     if ! command_exists "$package" && ! xbps-query -Rs "$package" >/dev/null; then
@@ -48,23 +48,24 @@ else
     echo "SDDM is already enabled."
 fi
 
-# Enable PipeWire services
-echo "Enabling PipeWire services..."
-if [ ! -L /var/service/pipewire ]; then
-    sudo ln -s /etc/sv/pipewire /var/service/
-fi
-if [ ! -L /var/service/pipewire-pulse ]; then
-    sudo ln -s /etc/sv/pipewire-pulse /var/service/
-fi
+# Set LXQt theme to dark mode
+echo "Setting LXQt theme to dark mode..."
+mkdir -p ~/.config/lxqt
+cat <<EOL | tee ~/.config/lxqt/lxqt.conf
+[General]
+theme=arc-dark
+EOL
 
-# Enable xdg-desktop-portal
-echo "Enabling xdg-desktop-portal service..."
-if [ ! -L /var/service/xdg-desktop-portal ]; then
-    sudo ln -s /etc/sv/xdg-desktop-portal /var/service/
-fi
-if [ ! -L /var/service/xdg-desktop-portal-wlr ]; then
-    sudo ln -s /etc/sv/xdg-desktop-portal-wlr /var/service/
-fi
+# Set the default terminal to Kitty and configure Kitty for dark mode
+echo "Configuring Kitty for dark mode..."
+mkdir -p ~/.config/kitty
+cat <<EOL | tee ~/.config/kitty/kitty.conf
+# Dark mode settings
+background #1c1c1c
+foreground #c8c8c8
+selection_background #444444
+selection_foreground #ffffff
+EOL
 
 # Set up SDDM custom theme directory
 SDDM_THEME_DIR="/usr/share/sddm/themes/stickman-theme"
@@ -123,6 +124,8 @@ Item {
             id: usernameField
             width: 300
             font.pixelSize: 24
+            color: "white"
+            backgroundColor: "black"  // Set text field background to dark
         }
 
         PlasmaCore.Label {
@@ -136,6 +139,8 @@ Item {
             width: 300
             echoMode: TextInput.Password
             font.pixelSize: 24
+            color: "white"
+            backgroundColor: "black"  // Set text field background to dark
         }
 
         Button {
