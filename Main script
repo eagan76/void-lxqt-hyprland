@@ -16,12 +16,12 @@ echo "Updating package list..."
 sudo xbps-install -S
 
 # Install necessary packages, with the -S flag to ensure dependencies are met
-echo "Installing Wayland, LXQt, Hyprland, SDDM, Kitty, PipeWire, and xdg-desktop-portal..."
+echo "Installing Wayland, LXQt, Hyprland, SDDM, Kitty, PipeWire, PulseAudio, and xdg-desktop-portal..."
 sudo xbps-install -Sy wayland wayland-protocols lxqt hyprland lxqt-qtplugin sddm kitty pipewire pipewire-alsa pipewire-pulse \
-xdg-desktop-portal xdg-desktop-portal-wlr
+xdg-desktop-portal xdg-desktop-portal-wlr pulseaudio pulseaudio-utils pavucontrol
 
 # Check for successful installation of essential packages
-REQUIRED_PACKAGES=("wayland" "lxqt" "hyprland" "sddm" "kitty" "pipewire" "xdg-desktop-portal" "xdg-desktop-portal-wlr")
+REQUIRED_PACKAGES=("wayland" "lxqt" "hyprland" "sddm" "kitty" "pipewire" "pulseaudio" "xdg-desktop-portal" "xdg-desktop-portal-wlr")
 
 for package in "${REQUIRED_PACKAGES[@]}"; do
     if ! command_exists "$package" && ! xbps-query -Rs "$package" >/dev/null; then
@@ -107,8 +107,8 @@ else
     echo "Session already set up."
 fi
 
-# Ensure PipeWire is installed and enabled
-echo "Setting up PipeWire..."
+# Ensure PipeWire and PulseAudio are installed and enabled
+echo "Setting up PipeWire and PulseAudio..."
 if ! command_exists "pipewire"; then
     echo "Error: PipeWire installation failed!"
     exit 1
@@ -117,6 +117,13 @@ else
     # Enable PipeWire services
     sudo ln -s /etc/sv/pipewire /var/service/
     sudo ln -s /etc/sv/pipewire-pulse /var/service/
+fi
+
+if ! command_exists "pulseaudio"; then
+    echo "Error: PulseAudio installation failed!"
+    exit 1
+else
+    echo "PulseAudio is installed."
 fi
 
 # Verify the installation of required packages
