@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# Add the Xtra Void repository for Hyprland (if not already added)
+if ! grep -q "https://repo.skami.dev" /etc/xbps.d/*; then
+  echo "Adding Xtra Void repository for Hyprland..."
+  sudo xbps-install -Syu
+  echo "repository=https://repo.skami.dev/xtra/current" | sudo tee /etc/xbps.d/00-repo-xtra.conf
+  sudo xbps-install -S
+fi
+
+# Install LXQt, Hyprland, SDDM, Kitty, PipeWire, and xdg-desktop-portal with dependencies
+echo "Installing LXQt, Hyprland, SDDM, Kitty, PipeWire, xdg-desktop-portal..."
+sudo xbps-install -Sy lxqt hyprland lxqt-qtplugin sddm kitty pipewire pipewire-alsa pipewire-pulse \
+xdg-desktop-portal xdg-desktop-portal-wlr
+
+# Enable SDDM as the default display manager
+echo "Enabling SDDM as the default display manager..."
+sudo ln -s /etc/sv/sddm /var/service/
+
+# Create .xinitrc file to start Hyprland with LXQt in Wayland
+echo "Creating .xinitrc file..."
+cat <<EOL > ~/.xinitrc
+#!/bin/sh
+# Set environment variable for Wayland
+export XDG_SESSION_TYPE=wayland
+# Start Hyprland as the window manager
+exec Hyprland &
+# Start LXQt
+exec startlxqt
+EOL
+
+# Make .xinitrc executable
+chmod +x ~/.xinitrc
+
+# Set up LXQt configuration for Wayland
+echo "Configuring LXQt for Wayland..."
+mkdir -p ~/.config/lxqt
+cat <<EOL > ~/.config/lxqt/lxqt.conf
+[General]
+# Use Wayland and specify Hyprland as the window manager
+window_manager=Hyprland
+EOL
+
+# Configure Hyprland shortcuts, window management, focus follows mouse
+echo "Configuring Hyprland shortcuts and focus follows mouse..."
+mkdir -p ~/.config/hypr
+cat <<EOL > ~/.config/hypr/hyprland.conf
+# Hyprland configuration for keybindings and window behavior
+bind=SUPER+Q, kill
+bind=SUPER+SHIFT+Q, kill
+bind=SUPER+ENTER, exec kitty
+bind=SUPER+D, exec lxqt-runner  # Use the LXQt menu
+
+# Window management settings
+layout=tiling
+# Enable borders
+border_width=2
+border_color=0xFFFFFF  # Change this to your preferred border color
+
+# Focus settings
+focus_follows_mouse=true
+EOL
+
+# Remove window closing buttons from LXQt
+echo "Removing window closing buttons from LXQt..."
+mkdir -p ~/.config/lxqt
+cat <<EOL > ~/.config/lxqt/lxqt.conf
+[Window]
+# Hide the close button
+close_button=false
+EOL
+
+# Check if a session is already set up
+echo "Checking for existing session setup..."
+if [ ! -f ~/.config/wayland-session ]; then
+    echo "Setting up a Wayland session..."
+    mkdir -p ~/.config
+    echo "export XDG_SESSION_TYPE=wayland" > ~/.config/wayland-session
+    echo "Session setup complete."
+else
+    echo "Session already set up."
+fi
+
+# Inform the user about the next steps
+echo "Setup is complete!"
+echo "SDDM is now set as the default display manager."
+echo "You can now reboot your system, and SDDM will be available for session selection."
+echo "PipeWire and xdg-desktop-portal have been installed and are ready to use."
