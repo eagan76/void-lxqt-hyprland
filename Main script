@@ -5,20 +5,14 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Add the repository for Hyprland (if not already added)
-if ! grep -q "https://raw.githubusercontent.com/Makrennel/hyprland-void/repository-x86_64-glibc" /etc/xbps.d/*; then
-  echo "Adding the repository for Hyprland..."
-  echo "repository=https://raw.githubusercontent.com/Makrennel/hyprland-void/repository-x86_64-glibc" | sudo tee /etc/xbps.d/00-hyprland-repo.conf
-fi
-
 # Update package list
 echo "Updating package list..."
 sudo xbps-install -S
 
 # Install necessary packages with the -S flag to ensure dependencies are met
-echo "Installing Wayland, LXQt, Hyprland, SDDM, Kitty, PipeWire, PulseAudio, xdg-desktop-portal, and curl..."
+echo "Installing Wayland, LXQt, Hyprland, SDDM, Kitty, PipeWire, PulseAudio, xdg-desktop-portal, curl, ImageMagick, and Runit..."
 sudo xbps-install -Sy wayland wayland-protocols lxqt hyprland lxqt-qtplugin sddm kitty pipewire pipewire-alsa pipewire-pulse \
-xdg-desktop-portal xdg-desktop-portal-wlr pulseaudio pulseaudio-utils pavucontrol curl imagemagick
+xdg-desktop-portal xdg-desktop-portal-wlr pulseaudio pulseaudio-utils pavucontrol curl imagemagick runit
 
 # Check for successful installation of essential packages
 REQUIRED_PACKAGES=("wayland" "lxqt" "hyprland" "sddm" "kitty" "pipewire" "pulseaudio" "xdg-desktop-portal" "xdg-desktop-portal-wlr" "curl" "imagemagick")
@@ -66,6 +60,24 @@ foreground #c8c8c8
 selection_background #444444
 selection_foreground #ffffff
 EOL
+
+# Install Nix package manager
+echo "Installing Nix package manager..."
+sh <(curl -L https://nixos.org/nix/install) --no-daemon
+
+# Enable Nix daemon as a service with Runit
+echo "Enabling Nix daemon as a Runit service..."
+sudo mkdir -p /etc/sv/nix-daemon
+sudo tee /etc/sv/nix-daemon/run > /dev/null <<EOL
+#!/bin/sh
+exec /nix/var/nix/profiles/default/bin/nix-daemon
+EOL
+sudo chmod +x /etc/sv/nix-daemon/run
+sudo ln -s /etc/sv/nix-daemon /var/service/
+
+# Set up Nix in the current shell
+echo "Setting up Nix in the current shell..."
+. /home/$USER/.nix-profile/etc/profile.d/nix.sh
 
 # Set up SDDM custom theme directory
 SDDM_THEME_DIR="/usr/share/sddm/themes/stickman-theme"
@@ -201,4 +213,4 @@ EOL
 echo "Restarting SDDM to apply changes..."
 sudo sv restart sddm
 
-echo "SDDM and LXQt theme setup complete."
+echo "SDDM, LXQt theme setup, and Nix installation complete."
