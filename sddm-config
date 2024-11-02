@@ -1,23 +1,25 @@
 #!/bin/bash
 
-# Function to check if a command was successful
-check_success() {
-    if [ $? -ne 0 ]; then
-        echo "Error: $1 failed."
-        exit 1
-    fi
-}
+# Enable the nonfree repository if not already enabled
+if ! grep -q "repository-nonfree" /etc/xbps.d/*; then
+    echo "Enabling the nonfree repository for additional packages..."
+    sudo xbps-install -Syu xbps
+    echo "repository=https://repo.voidlinux.org/current/nonfree" | sudo tee /etc/xbps.d/10-repo-nonfree.conf
+    echo "repository=https://repo.voidlinux.org/current/multilib/nonfree" | sudo tee -a /etc/xbps.d/10-repo-nonfree.conf
+fi
 
 # Update package list and install SDDM and ImageMagick
-echo "Installing SDDM and ImageMagick..."
-sudo xbps-install -Sy sddm imagemagick
-check_success "SDDM and ImageMagick installation"
+echo "Updating repositories and installing SDDM and ImageMagick..."
+sudo xbps-install -Syu sddm imagemagick
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install SDDM and ImageMagick."
+    exit 1
+fi
 
 # Enable SDDM with runit
 echo "Enabling SDDM with runit..."
 if [ ! -L /var/service/sddm ]; then
     sudo ln -s /etc/sv/sddm /var/service/
-    check_success "Enabling SDDM service with runit"
 else
     echo "SDDM is already enabled."
 fi
@@ -25,7 +27,10 @@ fi
 # Set up SDDM custom theme directory
 SDDM_THEME_DIR="/usr/share/sddm/themes/stickman-theme"
 sudo mkdir -p "$SDDM_THEME_DIR"
-check_success "Creating theme directory"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to create theme directory."
+    exit 1
+fi
 
 # SDDM Theme Configuration
 echo "Setting up the SDDM theme..."
@@ -37,7 +42,6 @@ type=QML
 [Greeter]
 position=center
 EOL
-check_success "Creating theme.conf file"
 
 # Create the QML file for SDDM layout
 echo "Creating QML layout file..."
@@ -106,13 +110,15 @@ Item {
     }
 }
 EOL
-check_success "Creating Main.qml file for theme layout"
 
 # Create the background image with gradient and centered text for SDDM
 echo "Generating background image for SDDM..."
 convert -size 1920x1080 gradient:yellow-purple -pointsize 120 \
     -gravity center -fill mediumgrey -annotate +0+0 'Stickman-OS' "$SDDM_THEME_DIR/background.png"
-check_success "Generating background image"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to generate background image."
+    exit 1
+fi
 
 # Configure SDDM to use the custom theme by modifying /etc/sddm.conf
 SDDM_CONF="/etc/sddm.conf"
@@ -124,12 +130,18 @@ fi
 echo "Configuring SDDM to use the new theme..."
 sudo sed -i '/^\[Theme\]/,/^Current/ {s/^Current=.*/Current=stickman-theme/}' "$SDDM_CONF"
 grep -q "Current=stickman-theme" "$SDDM_CONF"
-check_success "Setting theme in sddm.conf"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to set theme in sddm.conf."
+    exit 1
+fi
 
 # Restart SDDM and check if it's running
 echo "Restarting SDDM to apply changes..."
 sudo sv restart sddm
-check_success "Restarting SDDM"
+if [ $? -ne 0 ]; then
+    echo "Error: SDDM service failed to restart."
+    exit 1
+fi
 
 # Check if SDDM service is active
 sleep 2  # Allow a moment for SDDM to start
