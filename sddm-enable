@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Script to install and enable SDDM on Void Linux
+
+echo "Installing SDDM..."
+sudo xbps-install -S sddm
+
+echo "Enabling SDDM service..."
+sudo ln -s /etc/sv/sddm /var/service
+
+echo "Starting SDDM service..."
+sudo sv up sddm
+
+echo "SDDM has been installed, enabled, and started successfully."
