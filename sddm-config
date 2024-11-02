@@ -1,13 +1,23 @@
 #!/bin/bash
 
-# Update package list and install SDDM if not already installed
-echo "Installing SDDM..."
+# Function to check if a command was successful
+check_success() {
+    if [ $? -ne 0 ]; then
+        echo "Error: $1 failed."
+        exit 1
+    fi
+}
+
+# Update package list and install SDDM and ImageMagick
+echo "Installing SDDM and ImageMagick..."
 sudo xbps-install -Sy sddm imagemagick
+check_success "SDDM and ImageMagick installation"
 
 # Enable SDDM with runit
 echo "Enabling SDDM with runit..."
 if [ ! -L /var/service/sddm ]; then
     sudo ln -s /etc/sv/sddm /var/service/
+    check_success "Enabling SDDM service with runit"
 else
     echo "SDDM is already enabled."
 fi
@@ -15,6 +25,7 @@ fi
 # Set up SDDM custom theme directory
 SDDM_THEME_DIR="/usr/share/sddm/themes/stickman-theme"
 sudo mkdir -p "$SDDM_THEME_DIR"
+check_success "Creating theme directory"
 
 # SDDM Theme Configuration
 echo "Setting up the SDDM theme..."
@@ -26,6 +37,7 @@ type=QML
 [Greeter]
 position=center
 EOL
+check_success "Creating theme.conf file"
 
 # Create the QML file for SDDM layout
 echo "Creating QML layout file..."
@@ -94,11 +106,13 @@ Item {
     }
 }
 EOL
+check_success "Creating Main.qml file for theme layout"
 
 # Create the background image with gradient and centered text for SDDM
 echo "Generating background image for SDDM..."
 convert -size 1920x1080 gradient:yellow-purple -pointsize 120 \
     -gravity center -fill mediumgrey -annotate +0+0 'Stickman-OS' "$SDDM_THEME_DIR/background.png"
+check_success "Generating background image"
 
 # Configure SDDM to use the custom theme by modifying /etc/sddm.conf
 SDDM_CONF="/etc/sddm.conf"
@@ -106,12 +120,22 @@ if [ ! -f "$SDDM_CONF" ]; then
     echo "[Theme]" | sudo tee -a "$SDDM_CONF"
 fi
 
-# Ensure the theme setting is correct
+# Set theme and confirm it was applied
 echo "Configuring SDDM to use the new theme..."
 sudo sed -i '/^\[Theme\]/,/^Current/ {s/^Current=.*/Current=stickman-theme/}' "$SDDM_CONF"
+grep -q "Current=stickman-theme" "$SDDM_CONF"
+check_success "Setting theme in sddm.conf"
 
-# Restart SDDM to apply changes
+# Restart SDDM and check if it's running
 echo "Restarting SDDM to apply changes..."
 sudo sv restart sddm
+check_success "Restarting SDDM"
 
-echo "SDDM setup with custom theme complete."
+# Check if SDDM service is active
+sleep 2  # Allow a moment for SDDM to start
+if sudo sv status sddm | grep -q "run"; then
+    echo "SDDM setup with custom theme complete and is running successfully."
+else
+    echo "Error: SDDM service failed to start."
+    exit 1
+fi
