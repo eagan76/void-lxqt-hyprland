@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# Update the system package list
+echo "Updating package list..."
+sudo xbps-install -S
+
+# Install Hyprland and dependencies
+echo "Installing Hyprland and dependencies..."
+sudo xbps-install -y hyprland wayland wayland-protocols xorg-server-xwayland
+
+# Remove Openbox
+echo "Removing Openbox..."
+sudo xbps-remove -y openbox
+
+# Set Hyprland as the default session for LXQt
+echo "Configuring LXQt to use Hyprland as the default compositor..."
+
+# Create a Hyprland session file for LXQt
+mkdir -p ~/.config/wayland-sessions
+echo "[Desktop Entry]
+Name=Hyprland
+Comment=Hyprland on LXQt
+Exec=Hyprland
+Type=Application
+" > ~/.config/wayland-sessions/hyprland.desktop
+
+# Update LXQt session settings to use Hyprland
+echo "Updating LXQt configuration to use Hyprland..."
+
+# Configure Hyprland to start as the window manager for LXQt
+mkdir -p ~/.config/lxqt
+echo "export QT_QPA_PLATFORM=wayland
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=Hyprland
+export GDK_BACKEND=wayland
+export SDL_VIDEODRIVER=wayland
+export MOZ_ENABLE_WAYLAND=1
+" > ~/.config/lxqt/lxqt.conf
+
+# Configure auto-start applications if needed
+mkdir -p ~/.config/autostart
+echo "[Desktop Entry]
+Name=Hyprland Start
+Exec=Hyprland
+Type=Application
+" > ~/.config/autostart/hyprland-start.desktop
+
+# Install SDDM and the Candy theme
+echo "Installing SDDM and setting up the Candy theme..."
+sudo xbps-install -y sddm git unzip curl
+
+# Enable SDDM to start on boot
+echo "Enabling SDDM as the default display manager..."
+sudo ln -s /etc/sv/sddm /var/service
+
+# Download and install the Candy theme
+THEME_DIR="/usr/share/sddm/themes/candy"
+echo "Downloading Candy theme for SDDM..."
+git clone https://github.com/EliverLara/candy-sddm-theme.git /tmp/candy-sddm-theme
+sudo mkdir -p $THEME_DIR
+sudo cp -r /tmp/candy-sddm-theme/* $THEME_DIR
+rm -rf /tmp/candy-sddm-theme
+
+# Configure SDDM to use the Candy theme
+echo "Configuring SDDM to use the Candy theme..."
+sudo mkdir -p /etc/sddm.conf.d
+echo "[Theme]
+Current=candy
+" | sudo tee /etc/sddm.conf.d/00_theme.conf
+
+echo "Setup complete. Reboot your system to apply changes."
+
+echo "Hyprland is now set as the default compositor for LXQt, and SDDM is the login manager with the Candy theme."
